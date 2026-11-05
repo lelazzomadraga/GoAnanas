@@ -1,0 +1,6 @@
+fruit_rot
+healthy
+heart_rot
+mealybug_wilt
+multiple_crown_disorder
+root_rot

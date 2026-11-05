@@ -1,0 +1,24 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function sameFarm(farm) { return signedIn() && me().farmCode == farm; }
+    function isReviewer() { return me().role in ['Farm owner', 'Agricultural technician']; }
+
+    // each user can read and write only their own profile
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // scans are shared by everyone with the same farm code
+    match /farms/{farm}/scans/{scanId} {
+      allow read: if sameFarm(farm);
+      allow create: if sameFarm(farm) && request.resource.data.userId == request.auth.uid;
+      // the owner of the scan may update it; the farm owner and technician may add review notes and status
+      allow update: if sameFarm(farm) && (resource.data.userId == request.auth.uid || isReviewer());
+      allow delete: if sameFarm(farm) && resource.data.userId == request.auth.uid;
+    }
+  }
+}

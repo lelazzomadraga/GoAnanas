@@ -1,0 +1,9 @@
+{
+  "firestore": { "rules": "firestore.rules" },
+  "storage": { "rules": "storage.rules" },
+  "functions": { "source": "functions" },
+  "hosting": {
+    "public": "../web_dashboard",
+    "ignore": ["firebase.json", "**/.*"]
+  }
+}

@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Go Ananas! Farm Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="firebase-config.js" onerror="window.GO_ANANAS_FIREBASE=null"></script>
+<style>
+  :root { --green:#1E5631; --fresh:#4C9A2A; --gold:#F4B400; --red:#C62828; --paper:#F6F8F2; --ink:#1d2a22; --muted:#5f6b63; --line:#dfe5da; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: "Segoe UI", Roboto, Arial, sans-serif; background:var(--paper); color:var(--ink); }
+  header { background:var(--green); color:#fff; padding:14px 24px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:20px; margin:0; flex:1; }
+  header .who { font-size:13px; opacity:.85; }
+  button, select, input { font:inherit; }
+  .btn { background:var(--gold); color:#3a2a00; border:0; border-radius:8px; padding:8px 14px; font-weight:600; cursor:pointer; }
+  .btn.ghost { background:transparent; color:inherit; border:1px solid currentColor; }
+  main { max-width:1200px; margin:0 auto; padding:20px 16px 40px; }
+  .banner { background:#FFF4D6; border:1px solid #f0d58a; color:#6b4e00; padding:10px 14px; border-radius:10px; margin-bottom:16px; font-size:14px; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px; }
+  .tile { background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
+  .tile b { display:block; font-size:28px; }
+  .tile span { color:var(--muted); font-size:13px; }
+  .grid { display:grid; grid-template-columns: 1.3fr 1fr; gap:16px; margin-bottom:16px; }
+  @media (max-width: 860px) { .grid { grid-template-columns:1fr; } }
+  .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; }
+  .card h2 { font-size:16px; margin:0 0 12px; }
+  .filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .filters select, .filters input { padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+  tr.row { cursor:pointer; } tr.row:hover { background:#f3f7ef; }
+  .thumb { width:44px; height:44px; border-radius:8px; object-fit:cover; background:#e8ece4; }
+  .tag { display:inline-block; padding:2px 9px; border-radius:20px; font-size:12px; font-weight:600; }
+  .tag.Open { background:#FDECEA; color:var(--red); } .tag.Rechecked { background:#FFF4D6; color:#8a6100; }
+  .tag.Resolved, .tag.Healthy { background:#E6F2E0; color:var(--green); }
+  .dis { color:var(--red); font-weight:600; } .ok { color:var(--fresh); font-weight:600; }
+  .table-wrap { overflow-x:auto; }
+  dialog { border:0; border-radius:16px; padding:0; max-width:560px; width:94vw; }
+  dialog .body { padding:18px; }
+  dialog img { width:100%; max-height:300px; object-fit:cover; border-radius:12px; background:#e8ece4; }
+  dialog textarea { width:100%; min-height:70px; border:1px solid var(--line); border-radius:8px; padding:8px; }
+  .row-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap; }
+  #login { max-width:380px; margin:60px auto; }
+  #login input { width:100%; padding:10px; margin-bottom:10px; border:1px solid var(--line); border-radius:8px; }
+  .err { color:var(--red); font-size:14px; min-height:18px; }
+  .muted { color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Go Ananas! Farm Dashboard</h1>
+  <span class="who" id="who"></span>
+  <button class="btn ghost" id="exportBtn" hidden>Export CSV</button>
+  <button class="btn ghost" id="logoutBtn" hidden>Sign out</button>
+</header>
+
+<main>
+  <section id="login" class="card" hidden>
+    <h2>Sign in</h2>
+    <p class="muted">Use the same e-mail and password registered in the Go Ananas! Android app.</p>
+    <input id="email" type="email" placeholder="E-mail" autocomplete="username">
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+    <div class="err" id="loginErr"></div>
+    <button class="btn" id="loginBtn" style="width:100%">Sign in</button>
+  </section>
+
+  <section id="app" hidden>
+    <div class="banner" id="demoBanner" hidden>Demo mode: no Firebase configuration was found, so the dashboard shows sample records only. Add firebase-config.js to connect it to the farm's real scans.</div>
+    <div class="tiles">
+      <div class="tile"><b id="tTotal">0</b><span>Plants scanned</span></div>
+      <div class="tile"><b id="tHealthy" class="ok">0%</b><span>Healthy</span></div>
+      <div class="tile"><b id="tDiseased" class="dis">0</b><span>With disease or disorder</span></div>
+      <div class="tile"><b id="tOpen" style="color:#8a6100">0</b><span>Open cases needing action</span></div>
+    </div>
+    <div class="grid">
+      <div class="card"><h2>Detections per class</h2><canvas id="classChart" height="220"></canvas></div>
+      <div class="card"><h2>Diseased plants per block</h2><canvas id="blockChart" height="220"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:16px"><h2>Scans per week (last 8 weeks)</h2><canvas id="weekChart" height="90"></canvas></div>
+    <div class="card">
+      <h2>Scan records</h2>
+      <div class="filters">
+        <select id="fClass"><option value="">All classes</option></select>
+        <select id="fStatus"><option value="">All status</option><option>Open</option><option>Rechecked</option><option>Resolved</option><option>Healthy</option></select>
+        <select id="fBlock"><option value="">All blocks</option></select>
+        <input id="fText" placeholder="Search notes or worker">
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th>Date</th><th>Result</th><th>Confidence</th><th>Block</th><th>Part</th><th>Scanned by</th><th>Status</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+      <p class="muted" id="count"></p>
+      <button class="btn ghost" style="color:var(--ink)" id="moreBtn" hidden>Show more</button>
+    </div>
+  </section>
+</main>
+
+<dialog id="detail">
+  <div class="body">
+    <img id="dImg" alt="Scanned pineapple">
+    <h2 id="dTitle" style="margin:12px 0 4px"></h2>
+    <div class="muted" id="dMeta"></div>
+    <p id="dAction"></p>
+    <label class="muted">Technician or owner notes</label>
+    <textarea id="dNotes"></textarea>
+    <div class="row-actions">
+      <button class="btn ghost" style="color:var(--ink)" id="dClose">Close</button>
+      <button class="btn ghost" style="color:var(--ink)" data-status="Rechecked">Mark rechecked</button>
+      <button class="btn ghost" style="color:var(--ink)" data-status="Open">Reopen</button>
+      <button class="btn" data-status="Resolved">Mark resolved</button>
+      <button class="btn" id="dSave">Save notes</button>
+    </div>
+  </div>
+</dialog>
+
+<script type="module">
+const CLASSES = [
+  ["fruit_rot", "Fruit Rot"], ["healthy", "Healthy"], ["heart_rot", "Heart Rot"],
+  ["mealybug_wilt", "Mealybug Wilt"], ["multiple_crown_disorder", "Multiple Crown Disorder"], ["root_rot", "Root Rot"],
+];
+const NAME = Object.fromEntries(CLASSES);
+const $ = (id) => document.getElementById(id);
+let scans = [], current = null, charts = {}, api = null, limit = 20;
+
+// ---------- data source: Firebase when configured, otherwise sample data ----------
+async function firebaseApi(cfg) {
+  const v = "10.14.1", base = `https://www.gstatic.com/firebasejs/${v}/`;
+  const { initializeApp } = await import(base + "firebase-app.js");
+  const A = await import(base + "firebase-auth.js");
+  const F = await import(base + "firebase-firestore.js");
+  const app = initializeApp(cfg), auth = A.getAuth(app), db = F.getFirestore(app);
+  let farm = null, unsub = null;
+  return {
+    onUser(cb) { A.onAuthStateChanged(auth, async (u) => {
+      if (!u) return cb(null);
+      const prof = (await F.getDoc(F.doc(db, "users", u.uid))).data() || {};
+      farm = prof.farmCode; cb({ email: u.email, ...prof });
+    }); },
+    login: (e, p) => A.signInWithEmailAndPassword(auth, e, p),
+    logout: () => { unsub && unsub(); return A.signOut(auth); },
+    listen(cb) {
+      const q = F.query(F.collection(db, "farms", farm, "scans"), F.orderBy("createdAt", "desc"), F.limit(1000));
+      unsub = F.onSnapshot(q, (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))));
+    },
+    update: (id, data) => F.updateDoc(F.doc(db, "farms", farm, "scans", id), { ...data, updatedAt: Date.now() }),
+  };
+}
+
+function demoApi() {
+  // sample records for demonstration only (the panel allowed sample data)
+  const blocks = ["Block A", "Block B", "Block C", "Block D"], parts = { fruit_rot: "Fruit", heart_rot: "Heart / center",
+    mealybug_wilt: "Leaf", multiple_crown_disorder: "Crown", root_rot: "Base / roots", healthy: "Whole plant" };
+  const workers = ["J. Dela Cruz", "M. Santos", "R. Villanueva"], weights = [8, 30, 6, 9, 4, 5];
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const pick = () => { let r = rnd() * 62, i = 0; while ((r -= weights[i]) > 0) i++; return CLASSES[i][0]; };
+  const data = Array.from({ length: 62 }, (_, i) => {
+    const label = pick(), healthy = label === "healthy", t = Date.now() - Math.floor(rnd() * 56) * 864e5 - i * 36e5;
+    const status = healthy ? "Healthy" : ["Open", "Open", "Rechecked", "Resolved"][Math.floor(rnd() * 4)];
+    return { id: "demo" + i, predictedLabel: label, predictedClass: NAME[label], isHealthy: healthy,
+      confidence: 0.62 + rnd() * 0.37, block: blocks[Math.floor(rnd() * (healthy ? 4 : 3))], plantPart: parts[label],
+      userName: workers[i % 3], status, notes: "", createdAt: t, imageUrl: "",
+      recommendedAction: healthy ? "No action needed. Continue regular monitoring." : "See the disease guide in the app for the recommended action." };
+  }).sort((a, b) => b.createdAt - a.createdAt);
+  return {
+    onUser: (cb) => cb({ email: "demo", name: "Demo user", role: "Farm owner", farmCode: "DAKO-TAGAYTAY" }),
+    login: async () => {}, logout: async () => location.reload(),
+    listen: (cb) => cb(data),
+    update: async (id, d) => { Object.assign(data.find((x) => x.id === id), d); api.listen(render); },
+  };
+}
+
+// ---------- rendering ----------
+function filtered() {
+  const c = $("fClass").value, s = $("fStatus").value, b = $("fBlock").value, t = $("fText").value.toLowerCase();
+  return scans.filter((x) => (!c || x.predictedLabel === c) && (!s || x.status === s) && (!b || x.block === b) &&
+    (!t || `${x.notes} ${x.userName} ${x.reviewNotes || ""}`.toLowerCase().includes(t)));
+}
+const fmt = (ms) => new Date(ms).toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function chart(id, type, labels, data, colors, opts = {}) {
+  charts[id]?.destroy();
+  charts[id] = new Chart($(id), { type, data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 6 }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, ...opts } });
+}
+
+function render(list) {
+  scans = list;
+  const total = scans.length, healthy = scans.filter((x) => x.isHealthy).length;
+  $("tTotal").textContent = total;
+  $("tHealthy").textContent = total ? Math.round(healthy * 100 / total) + "%" : "—";
+  $("tDiseased").textContent = total - healthy;
+  $("tOpen").textContent = scans.filter((x) => x.status === "Open").length;
+
+  const blocks = [...new Set(scans.map((x) => x.block).filter(Boolean))].sort();
+  const keep = $("fBlock").value;
+  $("fBlock").innerHTML = '<option value="">All blocks</option>' + blocks.map((b) => `<option>${esc(b)}</option>`).join("");
+  $("fBlock").value = keep;
+
+  chart("classChart", "bar", CLASSES.map((c) => c[1]), CLASSES.map((c) => scans.filter((x) => x.predictedLabel === c[0]).length),
+    CLASSES.map((c) => c[0] === "healthy" ? "#4C9A2A" : "#C62828"), { indexAxis: "y", scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } });
+  const byBlock = blocks.map((b) => scans.filter((x) => x.block === b && !x.isHealthy).length);
+  chart("blockChart", "bar", blocks, byBlock, "#F4B400");
+  const wk = 7 * 864e5, now = Date.now();
+  const weeks = [...Array(8)].map((_, i) => 7 - i);
+  chart("weekChart", "bar", weeks.map((w) => w === 0 ? "This week" : `${w} wk ago`),
+    weeks.map((w) => scans.filter((x) => x.createdAt > now - (w + 1) * wk && x.createdAt <= now - w * wk).length),
+    weeks.map((w) => w === 0 ? "#F4B400" : "#1E5631"));
+  table();
+}
+
+function table() {
+  const rows = filtered();
+  $("rows").innerHTML = rows.slice(0, limit).map((x) => `<tr class="row" data-id="${esc(x.id)}">
+    <td>${x.imageUrl ? `<img class="thumb" src="${esc(x.imageUrl)}" alt="">` : '<div class="thumb"></div>'}</td>
+    <td>${fmt(x.createdAt)}</td>
+    <td class="${x.isHealthy ? "ok" : "dis"}">${esc(x.predictedClass || NAME[x.predictedLabel])}</td>
+    <td>${(x.confidence * 100).toFixed(1)}%</td><td>${esc(x.block || "—")}</td><td>${esc(x.plantPart)}</td>
+    <td>${esc(x.userName)}</td><td><span class="tag ${esc(x.status)}">${esc(x.status)}</span></td></tr>`).join("");
+  $("count").textContent = `Showing ${Math.min(limit, rows.length)} of ${rows.length} matching records (${scans.length} in total)`;
+  $("moreBtn").hidden = rows.length <= limit;
+  document.querySelectorAll("tr.row").forEach((tr) => tr.onclick = () => open(tr.dataset.id));
+}
+
+function open(id) {
+  current = scans.find((x) => x.id === id); if (!current) return;
+  $("dImg").src = current.imageUrl || ""; $("dImg").hidden = !current.imageUrl;
+  $("dTitle").textContent = current.predictedClass || NAME[current.predictedLabel];
+  $("dTitle").className = current.isHealthy ? "ok" : "dis";
+  $("dMeta").textContent = `${(current.confidence * 100).toFixed(1)}% confidence • ${current.plantPart} • ${current.block || "no block"} • ${fmt(current.createdAt)} • ${current.userName || ""}`;
+  $("dAction").textContent = current.recommendedAction || "";
+  $("dNotes").value = current.reviewNotes || current.notes || "";
+  $("detail").showModal();
+}
+
+function exportCsv() {
+  const head = ["date", "class", "confidence", "block", "plant_part", "scanned_by", "status", "notes"];
+  const lines = filtered().map((x) => [new Date(x.createdAt).toISOString(), x.predictedClass, x.confidence.toFixed(4), x.block, x.plantPart, x.userName, x.status, x.reviewNotes || x.notes]
+    .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([[head.join(","), ...lines].join("\n")], { type: "text/csv" }));
+  a.download = "go_ananas_scans.csv"; a.click();
+}
+
+// ---------- events ----------
+CLASSES.forEach(([k, v]) => $("fClass").insertAdjacentHTML("beforeend", `<option value="${k}">${v}</option>`));
+["fClass", "fStatus", "fBlock", "fText"].forEach((id) => $(id).addEventListener("input", () => { limit = 20; table(); }));
+$("moreBtn").onclick = () => { limit += 20; table(); };
+$("dClose").onclick = () => $("detail").close();
+$("dSave").onclick = async () => { await api.update(current.id, { reviewNotes: $("dNotes").value }); $("detail").close(); };
+document.querySelectorAll("[data-status]").forEach((b) => b.onclick = async () => {
+  if (current.isHealthy) return $("detail").close();
+  await api.update(current.id, { status: b.dataset.status, reviewNotes: $("dNotes").value }); $("detail").close();
+});
+$("exportBtn").onclick = exportCsv;
+$("logoutBtn").onclick = () => api.logout();
+$("loginBtn").onclick = async () => {
+  $("loginErr").textContent = "";
+  try { await api.login($("email").value.trim(), $("password").value); }
+  catch (e) { $("loginErr").textContent = "Sign-in failed. Check the e-mail and password."; }
+};
+
+(async () => {
+  const cfg = window.GO_ANANAS_FIREBASE;
+  api = cfg ? await firebaseApi(cfg) : demoApi();
+  $("demoBanner").hidden = !!cfg;
+  api.onUser((u) => {
+    $("login").hidden = !!u; $("app").hidden = !u; $("logoutBtn").hidden = !u; $("exportBtn").hidden = !u;
+    $("who").textContent = u ? `${u.name || u.email} • ${u.role || ""} • ${u.farmCode || ""}` : "";
+    if (u) api.listen(render);
+  });
+})();
+</script>
+</body>
+</html>

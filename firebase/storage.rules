@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /farms/{farm}/scans/{file} {
+      function myFarm() {
+        return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.farmCode;
+      }
+      allow read: if request.auth != null && myFarm() == farm;
+      allow write: if request.auth != null && myFarm() == farm
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

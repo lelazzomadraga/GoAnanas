@@ -1,0 +1,18 @@
+{
+  "version": "0.1-demo",
+  "trained": false,
+  "test_accuracy": "not yet trained",
+  "input": [
+    224,
+    224,
+    3
+  ],
+  "classes": [
+    "fruit_rot",
+    "healthy",
+    "heart_rot",
+    "mealybug_wilt",
+    "multiple_crown_disorder",
+    "root_rot"
+  ]
+}

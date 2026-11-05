@@ -1,0 +1,10 @@
+{
+  "name": "go-ananas-functions",
+  "description": "Push notifications for Go Ananas! (new diseased scan and possible outbreak)",
+  "main": "index.js",
+  "engines": { "node": "20" },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.1"
+  }
+}
