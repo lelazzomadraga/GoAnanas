@@ -69,6 +69,8 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.4.1")
     implementation("androidx.camera:camera-lifecycle:1.4.1")
     implementation("androidx.camera:camera-view:1.4.1")
+    // ProcessCameraProvider.getInstance() returns a Guava ListenableFuture
+    implementation("com.google.guava:guava:33.3.1-android")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
 
